@@ -1,4 +1,4 @@
-module demo-pwa
+module demo-pwa/go-backend
 
 go 1.21
 

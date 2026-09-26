@@ -122,7 +122,14 @@ export default function Home() {
       });
 
       if (!res.ok) {
-        throw new Error(await res.text());
+        let errMessage = 'Failed to connect to server';
+        try {
+          const errData = await res.json();
+          errMessage = errData.error || errData.message || JSON.stringify(errData);
+        } catch {
+          errMessage = await res.text();
+        }
+        throw new Error(errMessage);
       }
 
       setJoined(true);
@@ -172,8 +179,14 @@ export default function Home() {
       });
 
       if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText);
+        let errMessage = 'Failed to send beep';
+        try {
+          const errData = await res.json();
+          errMessage = errData.error || errData.message || JSON.stringify(errData);
+        } catch {
+          errMessage = await res.text();
+        }
+        throw new Error(errMessage);
       }
 
       setStatusMsg(`✅ ส่งสัญญาณเสียงไปที่ "${targetUsername}" เรียบร้อยแล้ว!`);
