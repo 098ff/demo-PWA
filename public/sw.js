@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
   let data = {
     title: '🚨 BEEP ALERT!',
     body: 'มีคนกดส่งสัญญาณปี๊ปหาคุณ!',
-    custom_sound_url: '',
+    custom_sound_url: '/sounds/noti.mp3',
     from: 'Someone'
   };
 

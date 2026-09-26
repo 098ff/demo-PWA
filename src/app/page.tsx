@@ -47,6 +47,19 @@ export default function Home() {
     }
   }, []);
 
+  // Unlock and preload noti.mp3 on first touch or click
+  useEffect(() => {
+    const unlockHandler = () => {
+      initAudioContext();
+    };
+    window.addEventListener('click', unlockHandler, { once: true });
+    window.addEventListener('touchstart', unlockHandler, { once: true });
+    return () => {
+      window.removeEventListener('click', unlockHandler);
+      window.removeEventListener('touchstart', unlockHandler);
+    };
+  }, []);
+
   // Register service worker and listen for messages from background
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -54,6 +67,8 @@ export default function Home() {
         .register('/sw.js')
         .then((reg) => {
           console.log('Service Worker registered:', reg.scope);
+          // If a new service worker is waiting, update immediately
+          reg.update();
         })
         .catch((err) => {
           console.error('Service Worker registration failed:', err);
