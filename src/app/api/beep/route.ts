@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       title: '🚨 ALERT BEEP!',
       body: `🔊 '${from_username || 'Someone'}' กดส่งเสียงปี๊ปหาคุณ!`,
       from: from_username || 'Someone',
-      custom_sound_url: custom_sound_url || '',
+      custom_sound_url: custom_sound_url || '/noti.mp3',
       timestamp: Date.now(),
     });
 

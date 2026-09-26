@@ -327,7 +327,7 @@ export default function Home() {
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
-                  * หากเว้นว่างไว้ ระบบจะใช้เสียงสังเคราะห์ความถี่สูง 880Hz แทนอัตโนมัติ
+                  * หากเว้นว่างไว้ ระบบจะใช้เสียง noti.mp3 เป็นค่าเริ่มต้นอัตโนมัติ
                 </p>
               </div>
 

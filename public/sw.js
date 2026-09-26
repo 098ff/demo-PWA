@@ -28,6 +28,8 @@ self.addEventListener('push', (event) => {
     body: data.body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
+    sound: '/noti.mp3',
+    silent: false,
     tag: 'beep-notification-' + Date.now(),
     renotify: true,
     requireInteraction: true,
@@ -35,7 +37,7 @@ self.addEventListener('push', (event) => {
     vibrate: [500, 150, 500, 150, 800, 150, 800],
     data: {
       url: '/',
-      custom_sound_url: data.custom_sound_url,
+      custom_sound_url: data.custom_sound_url || '/noti.mp3',
       from: data.from,
       timestamp: Date.now()
     }
