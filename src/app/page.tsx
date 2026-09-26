@@ -29,7 +29,23 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [beepingUser, setBeepingUser] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState('');
-  const [pushStatus, setPushStatus] = useState<string>('idle');
+  const [pushStatus, setPushStatus] = useState<string>('กำลังตรวจสอบ...');
+  const [isIOSInBrowser, setIsIOSInBrowser] = useState(false);
+  const [hasPushSubscription, setHasPushSubscription] = useState(false);
+
+  // Check iOS Standalone status
+  useEffect(() => {
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        // @ts-expect-error iOS Safari proprietary property
+        Boolean(navigator.standalone);
+      if (isIOS && !isStandalone) {
+        setIsIOSInBrowser(true);
+      }
+    }
+  }, []);
 
   // Register service worker and listen for messages from background
   useEffect(() => {
@@ -61,26 +77,51 @@ export default function Home() {
     }
   }, [customSoundUrl]);
 
+  // Fetch VAPID public key dynamically if not inlined
+  const fetchVapidKey = async (): Promise<string | null> => {
+    if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY.trim() !== '') {
+      return process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY.trim();
+    }
+    try {
+      const res = await fetch('/api/vapid-public-key');
+      if (res.ok) {
+        const data = await res.json();
+        return data.publicKey || null;
+      }
+    } catch (e) {
+      console.error('Failed to fetch VAPID key:', e);
+    }
+    return null;
+  };
+
   // Subscribe to Web Push
   const subscribeToPush = async (): Promise<PushSubscription | null> => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setPushStatus('Web Push not supported on this browser');
+    if (!('serviceWorker' in navigator)) {
+      setPushStatus('เบราว์เซอร์นี้ไม่รองรับ Service Worker');
+      return null;
+    }
+
+    if (!('PushManager' in window)) {
+      if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+        setPushStatus('iPhone ต้อง Add to Home Screen ก่อนจึงจะใช้ Push ได้');
+      } else {
+        setPushStatus('เบราว์เซอร์นี้ไม่รองรับ PushManager');
+      }
       return null;
     }
 
     try {
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
-        setPushStatus('Notification permission denied');
+        setPushStatus('ถูกปฏิเสธสิทธิ์การแจ้งเตือน (Permission Denied)');
         return null;
       }
 
       const reg = await navigator.serviceWorker.ready;
-      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      const vapidKey = await fetchVapidKey();
 
       if (!vapidKey) {
-        setPushStatus('VAPID key not configured in env');
-        // Still allow joining without push for local testing
+        setPushStatus('ไม่พบ VAPID Public Key');
         return null;
       }
 
@@ -91,7 +132,8 @@ export default function Home() {
           applicationServerKey: urlB64ToUint8Array(vapidKey),
         });
       }
-      setPushStatus('Web Push active');
+      setPushStatus('Web Push พร้อมใช้งาน ✅');
+      setHasPushSubscription(true);
       return sub;
     } catch (err) {
       console.error('Push subscription failed:', err);
@@ -133,12 +175,38 @@ export default function Home() {
       }
 
       setJoined(true);
-      setStatusMsg(`เข้าร่วมสำเร็จในชื่อ "${username}"`);
+      if (!subscription) {
+        setStatusMsg(`⚠️ เข้าร่วมแล้วในชื่อ "${username}" (แต่ยังไม่มีสิทธิ์รับ Push Noti)`);
+      } else {
+        setStatusMsg(`✅ เข้าร่วมสำเร็จในชื่อ "${username}" (พร้อมรับเสียงปี๊ป)`);
+      }
       fetchUsers();
     } catch (err) {
       setStatusMsg(`เกิดข้อผิดพลาด: ${(err as Error).message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Retry enabling push
+  const handleRetryPush = async () => {
+    setStatusMsg('กำลังขอสิทธิ์ Push Notification ใหม่...');
+    const sub = await subscribeToPush();
+    if (sub && username) {
+      try {
+        await fetch('/api/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: username.trim(),
+            subscription: JSON.stringify(sub),
+          }),
+        });
+        setStatusMsg('✅ เปิดรับ Push Notification สำเร็จแล้ว!');
+        fetchUsers();
+      } catch (e) {
+        setStatusMsg(`อัปเดต Token ไม่สำเร็จ: ${(e as Error).message}`);
+      }
     }
   };
 
@@ -194,7 +262,7 @@ export default function Home() {
       setStatusMsg(`❌ ส่งไม่สำเร็จ: ${(err as Error).message}`);
     } finally {
       setBeepingUser(null);
-      setTimeout(() => setStatusMsg(''), 4000);
+      setTimeout(() => setStatusMsg(''), 5000);
     }
   };
 
@@ -210,6 +278,16 @@ export default function Home() {
             Proof of Concept: ปลุกเสียงเตือนข้ามเครื่องผ่าน Web Push
           </p>
         </header>
+
+        {/* iPhone Safari Special Warning */}
+        {isIOSInBrowser && (
+          <div className="my-3 p-3.5 text-xs rounded-xl bg-amber-950/80 border border-amber-600/80 text-amber-200">
+            <div className="font-bold flex items-center gap-1.5 text-amber-300 text-sm mb-1">
+              📱 คำแนะนำสำหรับผู้ใช้ iPhone:
+            </div>
+            Apple Safari จะไม่อนุญาตให้รับการแจ้งเตือน Push ในแท็บปกติ กรุณากดปุ่ม <strong>แชร์ (Share ปุ่มกลางล่างจอ)</strong> ➔ เลือก <strong>&quot;เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)&quot;</strong> แล้วเปิดแอพจากไอคอนที่หน้าโฮม จึงจะสามารถส่งและรับเสียงปี๊ปได้ครับ
+          </div>
+        )}
 
         {/* Status Alert Banner */}
         {statusMsg && (
@@ -266,23 +344,38 @@ export default function Home() {
           /* Active Room Section */
           <div className="mt-4 space-y-4">
             {/* My Profile Card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
-              <div>
-                <span className="text-xs text-slate-400">อุปกรณ์ของคุณ:</span>
-                <div className="text-lg font-bold text-emerald-400 flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-                  {username}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-slate-400">อุปกรณ์ของคุณ:</span>
+                  <div className="text-lg font-bold text-emerald-400 flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                    {username}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">สถานะ Noti: {pushStatus}</div>
                 </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Status: {pushStatus}</div>
+
+                {/* Test Speaker Button */}
+                <button
+                  onClick={() => playBeepSound(customSoundUrl)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded-md border border-slate-700"
+                >
+                  🔊 ทดสอบลำโพง
+                </button>
               </div>
 
-              {/* Test Speaker Button */}
-              <button
-                onClick={() => playBeepSound(customSoundUrl)}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded-md border border-slate-700"
-              >
-                🔊 ทดสอบลำโพง
-              </button>
+              {/* Retry Enable Push Button if missing */}
+              {!hasPushSubscription && (
+                <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between">
+                  <span className="text-xs text-amber-400">⚠️ เครื่องนี้ยังไม่ได้รับ Push Token</span>
+                  <button
+                    onClick={handleRetryPush}
+                    className="px-2.5 py-1 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded font-medium"
+                  >
+                    ขอสิทธิ์ Push อีกครั้ง
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Online Users List */}

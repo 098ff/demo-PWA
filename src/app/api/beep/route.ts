@@ -37,15 +37,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to parse target push subscription' }, { status: 500 });
     }
 
-    const vapidPublic = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
-    const vapidPrivate = process.env.VAPID_PRIVATE_KEY || '';
-    const vapidSubscriber = process.env.VAPID_SUBSCRIBER || 'mailto:admin@example.com';
+    const vapidPublic = (process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '').trim();
+    const vapidPrivate = (process.env.VAPID_PRIVATE_KEY || '').trim();
+    let vapidSubscriber = (process.env.VAPID_SUBSCRIBER || 'mailto:admin@example.com').trim();
 
     if (!vapidPublic || !vapidPrivate) {
-      return NextResponse.json({ error: 'VAPID keys are not configured on server' }, { status: 500 });
+      return NextResponse.json({ error: 'VAPID keys are not configured on server. Please check Vercel environment variables.' }, { status: 500 });
     }
 
-    webpush.setVapidDetails(vapidSubscriber, vapidPublic, vapidPrivate);
+    // Ensure VAPID subject starts with mailto: or https://
+    if (!vapidSubscriber.startsWith('mailto:') && !vapidSubscriber.startsWith('https://')) {
+      vapidSubscriber = `mailto:${vapidSubscriber}`;
+    }
+
+    try {
+      webpush.setVapidDetails(vapidSubscriber, vapidPublic, vapidPrivate);
+    } catch (vapidErr: unknown) {
+      const vMsg = vapidErr instanceof Error ? vapidErr.message : 'Invalid VAPID settings';
+      return NextResponse.json({ error: `VAPID Configuration Error: ${vMsg}` }, { status: 500 });
+    }
 
     const payload = JSON.stringify({
       title: '🚨 ALERT BEEP!',
